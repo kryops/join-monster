@@ -8,6 +8,8 @@ export default function defineObjectShape(topNode) {
   return _defineObjectShape(null, '', topNode)
 }
 
+export const aliasSeparator = '$'
+
 function _defineObjectShape(parent, prefix, node) {
   // if this table has a parent, prefix with the parent name and 2 underscores
   const prefixToPass = parent ? prefix + node.as + '__' : prefix
@@ -15,12 +17,16 @@ function _defineObjectShape(parent, prefix, node) {
   const fieldDefinition = {}
 
   for (let child of node.children) {
+    const aliasFieldName = child.alias && (child.fieldName + aliasSeparator + child.alias)
+
     switch (child.type) {
       case 'column':
         fieldDefinition[child.fieldName] = prefixToPass + child.as
+        if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
         break
       case 'composite':
         fieldDefinition[child.fieldName] = prefixToPass + child.as
+        if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
         break
       case 'columnDeps':
         for (let name in child.names) {
@@ -29,15 +35,18 @@ function _defineObjectShape(parent, prefix, node) {
         break
       case 'expression':
         fieldDefinition[child.fieldName] = prefixToPass + child.as
+        if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
         break
       case 'union':
       case 'table':
         if (child.sqlBatch) {
           fieldDefinition[child.sqlBatch.parentKey.fieldName] =
             prefixToPass + child.sqlBatch.parentKey.as
+           if (child.alias) fieldDefinition[child.sqlBatch.parentKey.fieldName + aliasSeparator + child.alias] = prefixToPass + child.sqlBatch.parentKey.as
         } else {
           const definition = _defineObjectShape(node, prefixToPass, child)
           fieldDefinition[child.fieldName] = definition
+          if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
         }
         break
       case 'noop':

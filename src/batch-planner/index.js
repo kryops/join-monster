@@ -2,6 +2,7 @@ import { uniq, chain, map, groupBy, forIn } from 'lodash'
 import arrToConnection from '../array-to-connection'
 import { handleUserDbCall, maybeQuote, wrap, compileSqlAST } from '../util'
 import idx from 'idx'
+import { aliasSeparator } from '../define-object-shape'
 
 async function nextBatch(sqlAST, data, dbCall, context, options) {
   // paginated fields are wrapped in connections. strip those off for the batching
@@ -37,6 +38,8 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
   if (childAST.type !== 'table' && childAST.type !== 'union') return
 
   const fieldName = childAST.fieldName
+  const alias = childAST.alias
+  const aliasFieldName = alias && fieldName + aliasSeparator + alias
 
   // see if any begin a new batch
   if (childAST.sqlBatch || idx(childAST, _ => _.junction.sqlBatch)) {
@@ -93,6 +96,7 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
                   }
                 }
               : [])
+          if (alias) obj[aliasFieldName] = obj[fieldName]
         }
       } else {
         let matchedData = []
@@ -107,6 +111,7 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
           } else {
             obj[fieldName] = null
           }
+          if (alias) obj[aliasFieldName] = obj[fieldName]
         }
         data = matchedData
       }
@@ -114,7 +119,7 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
       // move down a level and recurse
       const nextLevelData = chain(data)
         .filter(obj => obj != null)
-        .flatMap(obj => obj[fieldName])
+        .flatMap(obj => alias ? obj[aliasFieldName] : obj[fieldName])
         .filter(obj => obj != null)
         .value()
       return nextBatch(childAST, nextLevelData, dbCall, context, options)
@@ -134,26 +139,29 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
     if (childAST.paginate) {
       const targets = newData[data[parentKey]]
       data[fieldName] = arrToConnection(targets, childAST)
+      if (alias) data[aliasFieldName] = data[fieldName]
     } else if (childAST.grabMany) {
       data[fieldName] = newData[data[parentKey]] || []
+      if (alias) data[aliasFieldName] = data[fieldName]
     } else {
       const targets = newData[data[parentKey]] || []
       data[fieldName] = targets[0]
+      if (alias) data[aliasFieldName] = data[fieldName]
     }
     if (data) {
-      return nextBatch(childAST, data[fieldName], dbCall, context, options)
+      return nextBatch(childAST, alias ? data[aliasFieldName] : data[fieldName], dbCall, context, options)
     }
 
     // otherwise, just bypass this and recurse down to the next level
   } else if (Array.isArray(data)) {
     const nextLevelData = chain(data)
       .filter(obj => obj != null)
-      .flatMap(obj => obj[fieldName])
+      .flatMap(obj => alias ? obj[aliasFieldName] : obj[fieldName])
       .filter(obj => obj != null)
       .value()
     return nextBatch(childAST, nextLevelData, dbCall, context, options)
   } else if (data) {
-    return nextBatch(childAST, data[fieldName], dbCall, context, options)
+    return nextBatch(childAST, alias ? data[aliasFieldName] : data[fieldName], dbCall, context, options)
   }
 }
 
