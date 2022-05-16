@@ -1,3 +1,5 @@
+import { isEqual } from 'lodash'
+
 // If the same field is requested through multiple aliases,
 // we modify the object shape in the following way
 // - obj[<fieldName>] => resolver function that looks up the correct key based on the alias
@@ -10,8 +12,7 @@ export function getAliasKey(fieldName, alias) {
 }
 
 // We consider siblings conflicting if they access the same field through different aliases.
-// We could also check if the args differ, but this would break cases where aliases using
-// different args are nested within aliases using the same args.
+// For everything other than tables we also check if the args differ.
 export function hasConflictingSiblings(node, siblings) {
   return node.type !== 'noop'
     && siblings.some(sibling => (
@@ -19,6 +20,9 @@ export function hasConflictingSiblings(node, siblings) {
       && sibling.fieldName === node.fieldName
       && sibling.type !== 'noop'
       && sibling.alias !== node.alias
+      // Aliases using different args could be nested within aliased tables using the same args,
+      // so we need to treat all tables with different aliases as conflicting.
+      && (node.type === 'table' || !isEqual(node.args || {}, sibling.args || {}))
     ))
 }
 
