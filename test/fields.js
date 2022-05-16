@@ -50,7 +50,7 @@ test('it should handle duplicate object type field', async t => {
   t.deepEqual(expect, data)
 })
 
-test.skip('it should handle duplicate object type fields with different arguments', async t => {
+test('it should handle duplicate object type fields with different arguments', async t => {
   const query = `{
     user(id: 3) {
       comments: comments(active: true) {

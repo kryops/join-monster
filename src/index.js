@@ -10,7 +10,6 @@ import {
   compileSqlAST,
   getConfigFromSchemaObject
 } from './util'
-import { aliasAwareResolver } from './alias-aware-resolver'
 
 /*         _ _ _                _
   ___ __ _| | | |__   __ _  ___| | __
@@ -194,5 +193,3 @@ joinMonster.getNode = getNode
 // expose the package version for debugging
 joinMonster.version = require('../package.json').version
 export default joinMonster
-
-export { aliasAwareResolver }

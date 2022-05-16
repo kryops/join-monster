@@ -1,5 +1,6 @@
 import { validateSqlAST, inspect } from './util'
 import idx from 'idx'
+import { getAliasKey, hasConflictingSiblings, resolveAliasValue } from './aliases'
 
 // generate an object that defines the correct nesting shape for our GraphQL
 // this will be used by the library NestHydrationJS, check out their docs
@@ -8,8 +9,6 @@ export default function defineObjectShape(topNode) {
   return _defineObjectShape(null, '', topNode)
 }
 
-export const aliasSeparator = '$'
-
 function _defineObjectShape(parent, prefix, node) {
   // if this table has a parent, prefix with the parent name and 2 underscores
   const prefixToPass = parent ? prefix + node.as + '__' : prefix
@@ -17,16 +16,29 @@ function _defineObjectShape(parent, prefix, node) {
   const fieldDefinition = {}
 
   for (let child of node.children) {
-    const aliasFieldName = child.alias && (child.fieldName + aliasSeparator + child.alias)
+    const setField = definition => {
+      const originalKey = child.fieldName
+
+      if (hasConflictingSiblings(child, node.children) && !child.sqlBatch) {
+        const aliasKey = getAliasKey(originalKey, child.alias)
+        
+        fieldDefinition[aliasKey] = definition
+        fieldDefinition[originalKey] = {
+          column: aliasKey,
+          // we abuse the type handler to place our resolver function into the object instead of a value
+          type: () => resolveAliasValue
+        }
+      } else {
+        fieldDefinition[originalKey] = definition
+      }
+    }
 
     switch (child.type) {
       case 'column':
-        fieldDefinition[child.fieldName] = prefixToPass + child.as
-        if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
+        setField(prefixToPass + child.as)
         break
       case 'composite':
-        fieldDefinition[child.fieldName] = prefixToPass + child.as
-        if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
+        setField(prefixToPass + child.as)
         break
       case 'columnDeps':
         for (let name in child.names) {
@@ -34,19 +46,16 @@ function _defineObjectShape(parent, prefix, node) {
         }
         break
       case 'expression':
-        fieldDefinition[child.fieldName] = prefixToPass + child.as
-        if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
+        setField(prefixToPass + child.as)
         break
       case 'union':
       case 'table':
         if (child.sqlBatch) {
           fieldDefinition[child.sqlBatch.parentKey.fieldName] =
             prefixToPass + child.sqlBatch.parentKey.as
-           if (child.alias) fieldDefinition[child.sqlBatch.parentKey.fieldName + aliasSeparator + child.alias] = prefixToPass + child.sqlBatch.parentKey.as
         } else {
           const definition = _defineObjectShape(node, prefixToPass, child)
-          fieldDefinition[child.fieldName] = definition
-          if (child.alias) fieldDefinition[aliasFieldName] = fieldDefinition[child.fieldName]
+          setField(definition)
         }
         break
       case 'noop':
@@ -60,13 +69,31 @@ function _defineObjectShape(parent, prefix, node) {
 
   for (let typeName in node.typedChildren || {}) {
     const suffix = '@' + typeName
+
     for (let child of node.typedChildren[typeName]) {
+      const setField = definition => {
+        const originalKey = child.fieldName + suffix
+  
+        if (hasConflictingSiblings(child, node.typedChildren[typeName]) && !child.sqlBatch) {
+          const aliasKey = getAliasKey(originalKey, child.alias)
+          
+          fieldDefinition[aliasKey] = definition
+          fieldDefinition[originalKey] = {
+            column: aliasKey,
+            // we abuse the type handler to place our resolver function into the object instead of a value
+            type: () => resolveAliasValue
+          }
+        } else {
+          fieldDefinition[originalKey] = definition
+        }
+      }
+
       switch (child.type) {
         case 'column':
-          fieldDefinition[child.fieldName + suffix] = prefixToPass + child.as
+          setField(prefixToPass + child.as)
           break
         case 'composite':
-          fieldDefinition[child.fieldName + suffix] = prefixToPass + child.as
+          setField(prefixToPass + child.as)
           break
         case 'columnDeps':
           for (let name in child.names) {
@@ -74,7 +101,7 @@ function _defineObjectShape(parent, prefix, node) {
           }
           break
         case 'expression':
-          fieldDefinition[child.fieldName + suffix] = prefixToPass + child.as
+          setField(prefixToPass + child.as)
           break
         case 'union':
         case 'table':
@@ -87,7 +114,7 @@ function _defineObjectShape(parent, prefix, node) {
             ] = prefixToPass + child.junction.sqlBatch.parentKey.as
           } else {
             const definition = _defineObjectShape(node, prefixToPass, child)
-            fieldDefinition[child.fieldName + suffix] = definition
+            setField(definition)
           }
           break
         case 'noop':

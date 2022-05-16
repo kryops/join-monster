@@ -2,7 +2,7 @@ import { uniq, chain, map, groupBy, forIn } from 'lodash'
 import arrToConnection from '../array-to-connection'
 import { handleUserDbCall, maybeQuote, wrap, compileSqlAST } from '../util'
 import idx from 'idx'
-import { aliasSeparator } from '../define-object-shape'
+import { getAliasKey, hasConflictingSiblings, resolveAliasValue } from '../aliases'
 
 async function nextBatch(sqlAST, data, dbCall, context, options) {
   // paginated fields are wrapped in connections. strip those off for the batching
@@ -28,18 +28,18 @@ async function nextBatch(sqlAST, data, dbCall, context, options) {
   // loop through all the child fields that are tables
   return Promise.all(
     children.map(childAST =>
-      nextBatchChild(childAST, data, dbCall, context, options)
+      nextBatchChild(childAST, data, dbCall, context, options, children)
     )
   )
 }
 
 // processes a single child of the batch
-async function nextBatchChild(childAST, data, dbCall, context, options) {
+async function nextBatchChild(childAST, data, dbCall, context, options, siblings) {
   if (childAST.type !== 'table' && childAST.type !== 'union') return
 
+  const isConflicting = hasConflictingSiblings(childAST, siblings)
   const fieldName = childAST.fieldName
-  const alias = childAST.alias
-  const aliasFieldName = alias && fieldName + aliasSeparator + alias
+  const valueKey = isConflicting ? getAliasKey(fieldName, childAST.alias) : fieldName
 
   // see if any begin a new batch
   if (childAST.sqlBatch || idx(childAST, _ => _.junction.sqlBatch)) {
@@ -82,7 +82,7 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
       // if we they want many rows, give them an array
       if (childAST.grabMany) {
         for (let obj of data) {
-          obj[fieldName] =
+          obj[valueKey] =
             newData[obj[parentKey]] ||
             (childAST.paginate
               ? {
@@ -96,22 +96,22 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
                   }
                 }
               : [])
-          if (alias) obj[aliasFieldName] = obj[fieldName]
+          if (isConflicting) obj[fieldName] = resolveAliasValue
         }
       } else {
         let matchedData = []
         for (let obj of data) {
           const ob = newData[obj[parentKey]]
           if (ob) {
-            obj[fieldName] = arrToConnection(
+            obj[valueKey] = arrToConnection(
               newData[obj[parentKey]][0],
               childAST
             )
             matchedData.push(obj)
           } else {
-            obj[fieldName] = null
+            obj[valueKey] = null
           }
-          if (alias) obj[aliasFieldName] = obj[fieldName]
+          if (isConflicting) obj[fieldName] = resolveAliasValue
         }
         data = matchedData
       }
@@ -119,7 +119,7 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
       // move down a level and recurse
       const nextLevelData = chain(data)
         .filter(obj => obj != null)
-        .flatMap(obj => alias ? obj[aliasFieldName] : obj[fieldName])
+        .flatMap(obj => obj[valueKey])
         .filter(obj => obj != null)
         .value()
       return nextBatch(childAST, nextLevelData, dbCall, context, options)
@@ -138,30 +138,30 @@ async function nextBatchChild(childAST, data, dbCall, context, options) {
     newData = groupBy(newData, thisKey)
     if (childAST.paginate) {
       const targets = newData[data[parentKey]]
-      data[fieldName] = arrToConnection(targets, childAST)
-      if (alias) data[aliasFieldName] = data[fieldName]
+      data[valueKey] = arrToConnection(targets, childAST)
+      if (isConflicting) data[fieldName] = resolveAliasValue
     } else if (childAST.grabMany) {
-      data[fieldName] = newData[data[parentKey]] || []
-      if (alias) data[aliasFieldName] = data[fieldName]
+      data[valueKey] = newData[data[parentKey]] || []
+      if (isConflicting) data[fieldName] = resolveAliasValue
     } else {
       const targets = newData[data[parentKey]] || []
-      data[fieldName] = targets[0]
-      if (alias) data[aliasFieldName] = data[fieldName]
+      data[valueKey] = targets[0]
+      if (isConflicting) data[fieldName] = resolveAliasValue
     }
     if (data) {
-      return nextBatch(childAST, alias ? data[aliasFieldName] : data[fieldName], dbCall, context, options)
+      return nextBatch(childAST, data[valueKey], dbCall, context, options)
     }
 
     // otherwise, just bypass this and recurse down to the next level
   } else if (Array.isArray(data)) {
     const nextLevelData = chain(data)
       .filter(obj => obj != null)
-      .flatMap(obj => alias ? obj[aliasFieldName] : obj[fieldName])
+      .flatMap(obj => obj[valueKey])
       .filter(obj => obj != null)
       .value()
     return nextBatch(childAST, nextLevelData, dbCall, context, options)
   } else if (data) {
-    return nextBatch(childAST, alias ? data[aliasFieldName] : data[fieldName], dbCall, context, options)
+    return nextBatch(childAST, data[valueKey], dbCall, context, options)
   }
 }
 

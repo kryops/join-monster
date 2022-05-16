@@ -158,5 +158,3 @@ declare function joinMonster(
 ): Promise<any>
 
 export default joinMonster
-
-export declare const aliasAwareResolver: graphql.GraphQLFieldResolver<any, any, any>

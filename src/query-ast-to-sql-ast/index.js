@@ -494,12 +494,17 @@ function handleUnionSelections(
     // we need to figure out what kind of selection this is
     switch (selection.kind) {
       case 'Field':
-        // has this field been requested once already? GraphQL does not protect against duplicates so we have to check for it
         const alias = selection.alias && selection.alias.value
+        const hasArguments = !!(selection.arguments && selection.arguments.length > 0)
+
+        // has this field been requested once already? GraphQL does not protect against duplicates so we have to check for it
         const existingNode = children.find(
           child =>
             child.fieldName === selection.name.value && child.type === 'table'
-            && (child.alias && child.alias.value) === alias
+            && (
+              (!hasArguments && (!child.arguments || !child.arguments.length))
+              || (child.alias && child.alias.value) === alias
+            )
         )
         let newNode = new SQLASTNode(sqlASTNode, { alias })
         if (existingNode) {
@@ -611,6 +616,7 @@ function handleSelections(
       // if its another field, recurse through that
       case 'Field':
         const alias = selection.alias && selection.alias.value
+
         // has this field been requested once already? GraphQL does not protect against duplicates so we have to check for it
         const existingNode = children.find(
           child =>

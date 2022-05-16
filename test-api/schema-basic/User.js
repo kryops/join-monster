@@ -16,7 +16,6 @@ import Person from './Person'
 import AuthoredInterface from './Authored/Interface'
 import AuthoredUnion from './Authored/Union'
 import { toBase64, q, bool } from '../shared'
-import { aliasAwareResolver } from '../../src/alias-aware-resolver'
 
 const { STRATEGY, DB } = process.env
 
@@ -162,7 +161,6 @@ const User = new GraphQLObjectType({
         oldestFirst: { type: GraphQLBoolean },
         intimacy: { type: IntimacyLevel }
       },
-      resolve: aliasAwareResolver,
       extensions: {
         joinMonster: {
           orderBy: 'first_name',
