@@ -56,7 +56,7 @@ Such functions, like the `where`, `sqlJoin`, or `sqlExpr` function, should escap
 <div class="admonition danger">
   <p class="first admonition-title">Warning</p>
   <p class="last">
-    When writing custom resolvers for non-trivial fields, consider getting the value through the GraphQL default resolver.
+    When writing custom resolvers on non-trivial fields, consider getting the value through the GraphQL default resolver.
   </p>
 </div>
 
