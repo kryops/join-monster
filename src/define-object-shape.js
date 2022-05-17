@@ -24,7 +24,7 @@ function _defineObjectShape(parent, prefix, node) {
         
         fieldDefinition[aliasKey] = definition
         fieldDefinition[originalKey] = {
-          column: aliasKey,
+          column: '__jm__' + aliasKey, // non-existent key
           // we abuse the type handler to place our resolver function into the object instead of a value
           type: () => resolveAliasValue
         }
@@ -79,7 +79,7 @@ function _defineObjectShape(parent, prefix, node) {
           
           fieldDefinition[aliasKey] = definition
           fieldDefinition[originalKey] = {
-            column: aliasKey,
+            column: '__jm__' + aliasKey, // non-existent key
             // we abuse the type handler to place our resolver function into the object instead of a value
             type: () => resolveAliasValue
           }

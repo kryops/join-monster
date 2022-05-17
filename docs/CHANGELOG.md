@@ -1,5 +1,7 @@
 ### vNEXT
 
+- Support querying the same fields and relations with different args through different aliases (fixes [#126](https://github.com/join-monster/join-monster/issues/126))
+
 ### v3.1.1 (January 17, 2022)
 
 #### Fixed

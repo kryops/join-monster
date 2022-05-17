@@ -11,18 +11,30 @@ export function getAliasKey(fieldName, alias) {
   return fieldName + aliasSeparator + (alias || '')
 }
 
-// We consider siblings conflicting if they access the same field through different aliases.
-// For everything other than tables we also check if the args differ.
+// Types that never conflict even if they have aliases with different args.
+// That usually means the args are not used by join-monster itself.
+const neverConflictingTypes = ['noop', 'column', 'sqlDeps']
+
+// Types that always conflict even if their aliases have the same args.
+// That usually means they can have nested conflicts.
+const alwaysConflictingTypes = ['table', 'union']
+
+// Siblings are generally considered conflicting if they access the same field through different aliases.
+// As it changes the output for custom resolvers, we do our best to only mark nodes as conflicting
+// that actually need it to return the correct data.
 export function hasConflictingSiblings(node, siblings) {
-  return node.type !== 'noop'
+  return !neverConflictingTypes.includes(node.type)
     && siblings.some(sibling => (
       sibling !== node
       && sibling.fieldName === node.fieldName
-      && sibling.type !== 'noop'
       && sibling.alias !== node.alias
-      // Aliases using different args could be nested within aliased tables using the same args,
-      // so we need to treat all tables with different aliases as conflicting.
-      && (node.type === 'table' || !isEqual(node.args || {}, sibling.args || {}))
+      && !neverConflictingTypes.includes(sibling.type)
+      && (
+        alwaysConflictingTypes.includes(sibling.type)
+        // Fall back to comparing the args. This is mostly relevant for things like
+        // sqlExpr, which might use args in the query
+        || !isEqual(node.args || {}, sibling.args || {})
+      )
     ))
 }
 
